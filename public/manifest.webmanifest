@@ -1,0 +1,14 @@
+{
+  "name": "OneGuard LPG",
+  "short_name": "OneGuard",
+  "description": "Smart LPG cylinder level and leak monitoring.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1d1a17",
+  "theme_color": "#1d1a17",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

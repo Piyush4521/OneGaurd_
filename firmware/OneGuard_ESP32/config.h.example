@@ -1,0 +1,38 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// --- Wi-Fi Configuration ---
+#define WIFI_SSID "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+
+// --- Firebase Configuration ---
+// Note: In production, use Firebase App Check or Firebase Auth token exchange.
+// Never expose privileged service account keys directly in firmware.
+#define FIREBASE_HOST "oneguard-lpg-default-rtdb.firebaseio.com"
+#define FIREBASE_AUTH "YOUR_FIREBASE_DATABASE_SECRET_OR_TOKEN"
+#define DEVICE_ID "oneguard_kitchen_01"
+
+// --- Calibration & Hardware Parameters ---
+// Cylinder physical parameters (standard Indian 14.2kg domestic cylinder)
+#define DEFAULT_TARE_KG 15.3f
+#define DEFAULT_CAPACITY_KG 14.2f
+
+// Calibration factor for HX711 with 4x 50kg half-bridge load cells + Combinator
+// Determine using known reference weights (e.g. 5kg, 10kg barbell weight or water)
+#define DEFAULT_CALIBRATION_FACTOR -22450.0f
+
+// MQ-6 Load resistance on breakout module (typically 10k or 20k, verify with multimeter)
+#define MQ6_RL_VALUE 10.0f 
+// Sensor resistance in clean air (determine during 24h clean air burn-in calibration)
+#define MQ6_RO_CLEAN_AIR 10.0f 
+
+// Voltage divider ratio between MQ-6 analog output (5V max) and ESP32 GPIO34 (3.3V safe max)
+// Using 10k and 10k (or 10k and 20k) divider. Factor = (R1 + R2) / R2
+#define MQ6_DIVIDER_RATIO 2.0f
+
+// Safety Alert Thresholds (in approximate ppm response)
+#define LEAK_WARN_PPM 1000
+#define LEAK_ALARM_PPM 2000
+#define LEAK_HYSTERESIS_PPM 150
+
+#endif // CONFIG_H

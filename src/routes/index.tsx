@@ -1,17 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Activity,
   AlertTriangle,
   BatteryCharging,
   BatteryMedium,
   CheckCircle2,
   Clock,
+  Coffee,
+  Eye,
   Flame,
   Phone,
-  RefreshCw,
+  Radio,
+  RotateCw,
   Scale,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
+  Utensils,
   Volume2,
   VolumeX,
   Wifi,
@@ -54,6 +60,7 @@ function Dashboard() {
   const [now, setNow] = useState(0);
   const [isSirenActive, setIsSirenActive] = useState(false);
   const [showSimMenu, setShowSimMenu] = useState(false);
+  const [modelAngle, setModelAngle] = useState<"front" | "iso" | "top">("iso");
 
   useEffect(() => {
     setMounted(true);
@@ -89,9 +96,12 @@ function Dashboard() {
   };
 
   const status = getHinglishStatus(pct, level, reading?.source ?? "simulated");
-
-  // Find cylinder preset details
   const activePreset = CYLINDER_PRESETS.find((p) => p.capacityKg === cfg.capacityKg) ?? CYLINDER_PRESETS[0]!;
+
+  const netLpgKg = reading?.lpgKg ?? 8.81;
+  const approxChaiCups = Math.max(0, Math.round(netLpgKg * 58));
+  const approxMeals = Math.max(0, Math.round(netLpgKg * 2.6));
+  const approxBurnHours = Math.max(0, netLpgKg * 3.3).toFixed(1);
 
   return (
     <Screen
@@ -102,7 +112,7 @@ function Dashboard() {
           {level === "alarm" && (
             <button
               onClick={toggleSiren}
-              className="flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-1.5 font-mono text-xs font-bold text-destructive-foreground brutal-sm press"
+              className="flex items-center gap-1.5 rounded-lg border-2 border-ink bg-destructive px-3 py-1.5 font-mono text-xs font-bold text-destructive-foreground shadow-[2px_2px_0px_var(--ink)] press"
             >
               {isSirenActive ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               {isSirenActive ? "Mute Siren" : "Sound Siren"}
@@ -112,14 +122,14 @@ function Dashboard() {
         </div>
       }
     >
-      {/* Critical Emergency Banner */}
+      {/* Critical Emergency Banner with hazard stripes */}
       <AnimatePresence>
         {level === "alarm" && (
           <motion.div
             initial={{ opacity: 0, y: -12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12 }}
-            className="mb-4 overflow-hidden rounded-2xl border-3 border-ink bg-destructive p-4 text-destructive-foreground shadow-[4px_4px_0px_#1d1a17]"
+            className="mb-4 overflow-hidden rounded-2xl border-3 border-ink bg-destructive p-4 text-destructive-foreground shadow-[4px_4px_0px_var(--ink)]"
           >
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-start gap-3">
@@ -129,14 +139,14 @@ function Dashboard() {
                     🚨 Gas Leak Detected! ({reading?.gasPpm} PPM)
                   </p>
                   <p className="mt-0.5 text-sm font-semibold text-destructive-foreground/90">
-                    Regulator knob band karein • Khidkiyan kholo • Electrical switch na chalayein • Immediate 1906 par call karein.
+                    Regulator knob band karein • Khidkiyan kholo • Electrical switch na chalayein • Call 1906 immediately.
                   </p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <a
                   href="tel:1906"
-                  className="inline-flex items-center gap-2 rounded-xl border-2 border-ink bg-paper px-4 py-2 font-display text-sm font-black text-ink shadow-[2px_2px_0px_#1d1a17] press"
+                  className="inline-flex items-center gap-2 rounded-xl border-2 border-ink bg-paper px-4 py-2 font-display text-sm font-black text-ink shadow-[2px_2px_0px_var(--ink)] press"
                 >
                   <Phone className="h-4 w-4" /> Call 1906 Helpline
                 </a>
@@ -148,7 +158,7 @@ function Dashboard() {
 
       {/* Cultural Hinglish Context Card & Interactive Demo Switcher */}
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 items-center gap-2.5 rounded-xl border-2 border-ink bg-paper/90 px-3.5 py-2.5 shadow-[2px_2px_0px_#1d1a17]">
+        <div className="flex flex-1 items-center gap-2.5 rounded-xl border-2 border-ink bg-paper/90 px-3.5 py-2.5 shadow-[2px_2px_0px_var(--ink)]">
           <span className="text-xl" role="img" aria-label="Status icon">
             {status.emoji}
           </span>
@@ -165,9 +175,9 @@ function Dashboard() {
               playChirp("tap");
               setShowSimMenu((v) => !v);
             }}
-            className="flex w-full items-center justify-between gap-2 rounded-xl border-2 border-ink bg-accent px-3 py-2 font-mono text-xs font-bold text-ink shadow-[2px_2px_0px_#1d1a17] press md:w-auto"
+            className="flex w-full items-center justify-between gap-2 rounded-xl border-2 border-ink bg-accent px-3 py-2 font-mono text-xs font-bold text-ink shadow-[2px_2px_0px_var(--ink)] press md:w-auto"
           >
-            <Zap className="h-3.5 w-3.5" />
+            <Zap className="h-3.5 w-3.5 text-ink" />
             <span>Scenario: {scenario.toUpperCase().replace("_", " ")}</span>
             <span className="text-[10px]">▼</span>
           </button>
@@ -178,7 +188,7 @@ function Dashboard() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 4 }}
-                className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl border-2 border-ink bg-paper p-1.5 shadow-[4px_4px_0px_#1d1a17]"
+                className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl border-2 border-ink bg-paper p-1.5 shadow-[4px_4px_0px_var(--ink)]"
               >
                 <p className="px-2 py-1 font-mono text-[10px] font-bold uppercase text-muted-foreground">Test Hardware States</p>
                 {(
@@ -201,7 +211,7 @@ function Dashboard() {
                       scenario === item.id ? "bg-accent font-bold" : "hover:bg-muted"
                     }`}
                   >
-                    <span className="text-xs font-bold">{item.label}</span>
+                    <span className="text-xs font-bold text-ink">{item.label}</span>
                     <span className="font-mono text-[10px] text-muted-foreground">{item.desc}</span>
                   </button>
                 ))}
@@ -215,16 +225,16 @@ function Dashboard() {
         {/* 3D Cylinder Hero Tile */}
         <motion.section
           variants={rise}
-          className="glass tile relative col-span-2 row-span-2 flex min-h-[390px] flex-col justify-between overflow-hidden md:min-h-[460px]"
+          className="glass tile relative col-span-2 row-span-2 flex min-h-[420px] flex-col justify-between overflow-hidden border-3 border-ink shadow-[4px_4px_0px_var(--ink)] md:min-h-[480px]"
         >
           <div className="flex items-start justify-between">
             <div>
               <p className="label-xs">LPG Gas Remaining</p>
               <div className="flex items-baseline gap-1">
-                <p className="font-display text-6xl font-black leading-none tabular-nums md:text-7xl">
+                <p className="font-display text-6xl font-black leading-none tabular-nums text-ink md:text-7xl">
                   {reading ? Math.round(pct) : "--"}
                 </p>
-                <span className="font-display text-3xl font-black">%</span>
+                <span className="font-display text-3xl font-black text-ink">%</span>
               </div>
               <p className="mt-1 font-mono text-sm">
                 {reading ? (
@@ -236,21 +246,58 @@ function Dashboard() {
                 )}
               </p>
             </div>
+
             <Link
               to="/settings"
+              onClick={() => playChirp("tap")}
               className="rounded-md border-2 border-ink bg-ink px-2.5 py-1 font-mono text-[11px] font-bold text-paper transition-transform active:scale-95"
             >
               {activePreset.shortName}
             </Link>
           </div>
 
-          {/* 3D Model View */}
+          {/* Chai & Meal Cultural Metric Chips */}
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            <div className="flex items-center gap-1 rounded-lg border border-ink/20 bg-paper/90 px-2 py-1 text-ink shadow-[1px_1px_0px_var(--ink)]">
+              <Coffee className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="font-mono text-[10px] font-bold leading-tight">~{approxChaiCups} Chai ☕</span>
+            </div>
+            <div className="flex items-center gap-1 rounded-lg border border-ink/20 bg-paper/90 px-2 py-1 text-ink shadow-[1px_1px_0px_var(--ink)]">
+              <Utensils className="h-3.5 w-3.5 text-accent shrink-0" />
+              <span className="font-mono text-[10px] font-bold leading-tight">~{approxMeals} Meals 🍲</span>
+            </div>
+            <div className="flex items-center gap-1 rounded-lg border border-ink/20 bg-paper/90 px-2 py-1 text-ink shadow-[1px_1px_0px_var(--ink)]">
+              <Flame className="h-3.5 w-3.5 text-destructive shrink-0" />
+              <span className="font-mono text-[10px] font-bold leading-tight">~{approxBurnHours}h Burn 🔥</span>
+            </div>
+          </div>
+
+          {/* 3D Model Viewport with Interactive HUD Overlay */}
           <div className="relative -mx-4 my-auto h-64 md:h-72">
             {mounted && (
               <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center font-mono text-xs">Loading 3D Engine...</div>}>
                 <Cylinder3D fill={pct / 100} shellColor={activePreset.color} isAlarm={level === "alarm"} />
               </Suspense>
             )}
+
+            {/* Quick 3D Angle Switcher HUD */}
+            <div className="absolute bottom-2 right-4 flex items-center gap-1 rounded-lg border-2 border-ink bg-paper/90 p-1 shadow-[2px_2px_0px_var(--ink)] backdrop-blur-sm">
+              <span className="px-1 font-mono text-[9px] font-bold uppercase text-muted-foreground">Angle</span>
+              {(["front", "iso", "top"] as const).map((a) => (
+                <button
+                  key={a}
+                  onClick={() => {
+                    playChirp("tap");
+                    setModelAngle(a);
+                  }}
+                  className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase transition-colors ${
+                    modelAngle === a ? "bg-accent text-ink" : "text-muted-foreground hover:text-ink"
+                  }`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Progress gauge with level marks */}
@@ -262,7 +309,7 @@ function Dashboard() {
               <span>75%</span>
               <span>100% Full</span>
             </div>
-            <div className="h-3.5 overflow-hidden rounded-md border-2 border-ink bg-ink/10 shadow-[1px_1px_0px_#1d1a17]">
+            <div className="h-3.5 overflow-hidden rounded-md border-2 border-ink bg-ink/10 shadow-[1px_1px_0px_var(--ink)]">
               <motion.div
                 className={`h-full ${
                   level === "alarm"
@@ -280,10 +327,10 @@ function Dashboard() {
           </div>
         </motion.section>
 
-        {/* Leak status tile */}
+        {/* Leak status tile with Live Oscilloscope Waveform */}
         <motion.section
           variants={rise}
-          className={`tile col-span-2 flex items-center gap-4 border-3 border-ink shadow-[4px_4px_0px_#1d1a17] ${
+          className={`tile col-span-2 flex flex-col justify-between border-3 border-ink shadow-[4px_4px_0px_var(--ink)] ${
             level === "alarm"
               ? "!bg-destructive text-destructive-foreground animate-pulse"
               : level === "warn"
@@ -291,34 +338,62 @@ function Dashboard() {
               : "!bg-safe text-ink"
           }`}
         >
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 border-ink bg-paper shadow-[2px_2px_0px_#1d1a17]">
-            {level === "alarm" ? (
-              <ShieldAlert className="h-7 w-7 text-destructive" strokeWidth={2.4} />
-            ) : level === "warn" ? (
-              <AlertTriangle className="h-7 w-7 text-ink" strokeWidth={2.4} />
-            ) : (
-              <ShieldCheck className="h-7 w-7 text-safe" strokeWidth={2.4} />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono text-[11px] font-bold uppercase tracking-wider">MQ-6 Gas Sensor</span>
-              {level === "safe" && <CheckCircle2 className="h-3.5 w-3.5" />}
+          <div className="flex items-center gap-3">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 border-ink bg-paper shadow-[2px_2px_0px_var(--ink)]">
+              {level === "alarm" ? (
+                <ShieldAlert className="h-7 w-7 text-destructive" strokeWidth={2.4} />
+              ) : level === "warn" ? (
+                <AlertTriangle className="h-7 w-7 text-ink" strokeWidth={2.4} />
+              ) : (
+                <ShieldCheck className="h-7 w-7 text-safe" strokeWidth={2.4} />
+              )}
             </div>
-            <p className="font-display text-2xl font-black leading-tight">
-              {level === "alarm" ? "Gas Leak! Khidkiyan Kholo" : level === "warn" ? "Gas Smell Detected" : "Sab Theek Hai"}
-            </p>
-            <p className="font-mono text-[11px] opacity-90">
-              {level === "alarm"
-                ? "Immediate hazard (>2000 ppm)"
-                : level === "warn"
-                ? "Above warning threshold (>1000 ppm)"
-                : "Air quality clean & normal"}
-            </p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-[11px] font-bold uppercase tracking-wider">MQ-6 Gas Sensor</span>
+                {level === "safe" && <CheckCircle2 className="h-3.5 w-3.5" />}
+              </div>
+              <p className="font-display text-2xl font-black leading-tight">
+                {level === "alarm" ? "Gas Leak! Khidkiyan Kholo" : level === "warn" ? "Gas Smell Detected" : "Sab Theek Hai"}
+              </p>
+              <p className="font-mono text-[11px] opacity-90">
+                {level === "alarm"
+                  ? "Immediate hazard (>2000 ppm)"
+                  : level === "warn"
+                  ? "Above warning threshold (>1000 ppm)"
+                  : "Air quality clean & normal"}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="font-mono text-3xl font-black tabular-nums">{reading?.gasPpm ?? "--"}</p>
+              <p className="font-mono text-[11px] uppercase">PPM</p>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="font-mono text-3xl font-black tabular-nums">{reading?.gasPpm ?? "--"}</p>
-            <p className="font-mono text-[11px] uppercase">PPM</p>
+
+          {/* Live Waveform Oscilloscope Graphic */}
+          <div className="mt-3 flex items-center justify-between rounded-lg border border-ink/20 bg-paper/60 px-3 py-1.5">
+            <div className="flex items-center gap-2">
+              <Radio className="h-3.5 w-3.5 text-ink animate-pulse" />
+              <span className="font-mono text-[10px] font-bold uppercase text-ink">Real-time Gas Waveform</span>
+            </div>
+            {/* SVG Waveform Simulation */}
+            <svg width="120" height="20" viewBox="0 0 120 20" className="overflow-visible">
+              <motion.path
+                d={
+                  level === "alarm"
+                    ? "M0,10 L15,10 L25,2 L35,18 L45,3 L55,17 L65,1 L75,19 L85,2 L95,18 L105,10 L120,10"
+                    : "M0,10 Q15,4 30,10 T60,10 T90,10 T120,10"
+                }
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                animate={{
+                  strokeDashoffset: [0, -40],
+                }}
+                transition={{ repeat: Infinity, duration: level === "alarm" ? 0.4 : 1.6, ease: "linear" }}
+              />
+            </svg>
           </div>
         </motion.section>
 
@@ -341,7 +416,7 @@ function Dashboard() {
         />
 
         {/* Device Health & Connectivity Bar */}
-        <motion.section variants={rise} className="glass tile col-span-2 grid grid-cols-3 gap-2 md:col-span-3">
+        <motion.section variants={rise} className="glass tile col-span-2 grid grid-cols-3 gap-2 border-2 border-ink shadow-[3px_3px_0px_var(--ink)] md:col-span-3">
           <Mini
             icon={online && reading?.source !== "offline" ? Wifi : WifiOff}
             label="Network"
@@ -367,7 +442,7 @@ function Dashboard() {
           <Link
             to="/alerts"
             onClick={() => playChirp("tap")}
-            className="tile flex h-full items-center justify-between gap-3 border-2 border-ink bg-primary shadow-[4px_4px_0px_#1d1a17] press"
+            className="tile flex h-full items-center justify-between gap-3 border-2 border-ink bg-primary shadow-[4px_4px_0px_var(--ink)] press"
           >
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-2 border-ink bg-paper">
@@ -400,7 +475,7 @@ function Stat({
   note: string;
 }) {
   return (
-    <motion.section variants={rise} className="glass tile flex flex-col justify-between gap-4">
+    <motion.section variants={rise} className="glass tile flex flex-col justify-between gap-4 border-2 border-ink shadow-[3px_3px_0px_var(--ink)]">
       <div className="flex items-center justify-between">
         <p className="label-xs">{label}</p>
         <div className="flex h-7 w-7 items-center justify-center rounded-md border-2 border-ink bg-paper/60">
@@ -408,7 +483,7 @@ function Stat({
         </div>
       </div>
       <div>
-        <p className="font-display text-4xl font-black leading-none tabular-nums">
+        <p className="font-display text-4xl font-black leading-none tabular-nums text-ink">
           {value}
           <span className="ml-1 text-base font-bold">{unit}</span>
         </p>
@@ -430,7 +505,7 @@ function Mini({
   sub: string;
 }) {
   return (
-    <div className="rounded-xl border-2 border-ink bg-paper/80 p-3 shadow-[2px_2px_0px_#1d1a17]">
+    <div className="rounded-xl border-2 border-ink bg-paper/80 p-3 shadow-[2px_2px_0px_var(--ink)]">
       <div className="flex items-center justify-between">
         <Icon className="h-4 w-4 text-ink" />
         <span className="label-xs">{label}</span>

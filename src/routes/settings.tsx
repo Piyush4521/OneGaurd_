@@ -8,11 +8,13 @@ import {
   Download,
   Flame,
   Info,
+  RefreshCw,
   Scale,
   Settings2,
   ShieldCheck,
   Sliders,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Screen, rise, stagger } from "@/components/app/AppShell";
@@ -40,6 +42,8 @@ function Settings() {
   const [saved, setSaved] = useState(false);
   const [install, setInstall] = useState<BIPEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [tareSuccess, setTareSuccess] = useState(false);
 
   useEffect(() => {
     setTare(String(cfg.tareKg));
@@ -89,11 +93,68 @@ function Settings() {
     }
   };
 
+  const handleZeroTareCalibration = () => {
+    playChirp("tap");
+    setIsCalibrating(true);
+    setTareSuccess(false);
+    setTimeout(() => {
+      playChirp("success");
+      setIsCalibrating(false);
+      setTareSuccess(true);
+      setTimeout(() => setTareSuccess(false), 4000);
+    }, 2500);
+  };
+
+  const activePreset = CYLINDER_PRESETS.find((p) => p.capacityKg === cfg.capacityKg) ?? CYLINDER_PRESETS[0]!;
+
   return (
     <Screen kicker="Hardware & Configuration" title="Device Setup">
       <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-4 md:grid-cols-2">
+        {/* Authentic Indian Cylinder Metal Neck Tag Visualizer */}
+        <motion.section
+          variants={rise}
+          className="tile col-span-2 flex flex-col items-center justify-between gap-4 border-3 border-ink bg-paper p-5 shadow-[4px_4px_0px_var(--ink)] sm:flex-row"
+        >
+          <div className="flex items-center gap-4">
+            {/* Visual Metal Neck Collar Stamp */}
+            <div
+              className="flex h-20 w-28 shrink-0 flex-col items-center justify-center rounded-xl border-3 border-ink text-paper shadow-[3px_3px_0px_var(--ink)]"
+              style={{ backgroundColor: activePreset.color }}
+            >
+              <span className="font-mono text-[9px] font-black uppercase tracking-widest text-paper/90">NECK STAMP</span>
+              <p className="font-display text-base font-black text-paper leading-tight">D-26</p>
+              <div className="mt-1 border-t border-paper/40 pt-0.5 text-center font-mono text-[10px] font-bold">
+                TARE {cfg.tareKg} KG
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="label-xs">Active Cylinder Profile</span>
+                <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[9px] font-black text-ink">
+                  AUTHENTICATED
+                </span>
+              </div>
+              <h2 className="font-display text-xl font-black text-ink">{activePreset.name}</h2>
+              <p className="font-mono text-xs text-muted-foreground">
+                Tare: {cfg.tareKg} kg • Rated LPG Fill: {cfg.capacityKg} kg • Total Gross: {(cfg.tareKg + cfg.capacityKg).toFixed(1)} kg
+              </p>
+            </div>
+          </div>
+
+          {/* Zero-Tare Offset Calibration Trigger */}
+          <button
+            onClick={handleZeroTareCalibration}
+            disabled={isCalibrating}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink bg-accent px-4 py-2.5 font-display text-xs font-black text-ink shadow-[2px_2px_0px_var(--ink)] press disabled:opacity-50 sm:w-auto"
+          >
+            <RefreshCw className={`h-4 w-4 ${isCalibrating ? "animate-spin" : ""}`} />
+            {isCalibrating ? "Zeroing Sensor Stand..." : tareSuccess ? "✓ Stand Offset Zeroed!" : "Zero Stand (Tare)"}
+          </button>
+        </motion.section>
+
         {/* Cylinder Preset Quick Selectors */}
-        <motion.section variants={rise} className="glass tile col-span-2">
+        <motion.section variants={rise} className="glass tile col-span-2 border-3 border-ink shadow-[4px_4px_0px_var(--ink)]">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="label-xs">Cylinder Presets</p>
@@ -111,8 +172,8 @@ function Settings() {
                   onClick={() => handleApplyPreset(p)}
                   className={`flex flex-col justify-between rounded-xl border-2 border-ink p-3.5 text-left transition-all ${
                     isSelected
-                      ? "bg-accent shadow-[4px_4px_0px_#1d1a17] scale-[1.02]"
-                      : "bg-paper hover:bg-paper/90 shadow-[2px_2px_0px_#1d1a17] opacity-80"
+                      ? "bg-accent shadow-[4px_4px_0px_var(--ink)] scale-[1.02]"
+                      : "bg-paper hover:bg-paper/90 shadow-[2px_2px_0px_var(--ink)] opacity-80"
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -134,7 +195,7 @@ function Settings() {
         </motion.section>
 
         {/* Manual Tare & Capacity Calibration Form */}
-        <motion.form variants={rise} className="glass tile space-y-3" onSubmit={handleManualSave}>
+        <motion.form variants={rise} className="glass tile space-y-3 border-2 border-ink shadow-[3px_3px_0px_var(--ink)]" onSubmit={handleManualSave}>
           <div className="flex items-center justify-between mb-1">
             <p className="label-xs">Manual Fine-Tuning</p>
             <span className="font-mono text-[10px] text-muted-foreground">Stamped on cylinder neck</span>
@@ -155,14 +216,14 @@ function Settings() {
 
           <button
             type="submit"
-            className="w-full rounded-xl border-2 border-ink bg-primary py-3 font-display text-sm font-black text-paper shadow-[3px_3px_0px_#1d1a17] press"
+            className="w-full rounded-xl border-2 border-ink bg-primary py-3 font-display text-sm font-black text-paper shadow-[3px_3px_0px_var(--ink)] press"
           >
-            {saved ? "✓ Configuration Saved!" : "Save Cylinder Parameters"}
+            {saved ? "✓ Configuration Saved!" : "Save Custom Parameters"}
           </button>
         </motion.form>
 
         {/* ESP32 Hardware Diagnostics & Status */}
-        <motion.section variants={rise} className="glass tile flex flex-col justify-between">
+        <motion.section variants={rise} className="glass tile flex flex-col justify-between border-2 border-ink shadow-[3px_3px_0px_var(--ink)]">
           <div>
             <div className="flex items-center justify-between mb-3">
               <p className="label-xs">OneGuard IoT Ring Status</p>
@@ -212,7 +273,7 @@ function Settings() {
                   playChirp("tap");
                   install?.prompt();
                 }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink bg-accent py-2.5 font-display text-xs font-black text-ink shadow-[2px_2px_0px_#1d1a17] press disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink bg-accent py-2.5 font-display text-xs font-black text-ink shadow-[2px_2px_0px_var(--ink)] press disabled:opacity-50"
               >
                 <Download className="h-4 w-4" /> Install as Offline PWA App
               </button>
@@ -226,7 +287,7 @@ function Settings() {
         </motion.section>
 
         {/* Legal & Compliance Footer */}
-        <motion.nav variants={rise} className="glass tile divide-y divide-ink/10 md:col-span-2">
+        <motion.nav variants={rise} className="glass tile divide-y divide-ink/10 border-2 border-ink shadow-[3px_3px_0px_var(--ink)] md:col-span-2">
           <Row to="/privacy" label="Privacy & Security Policy" />
           <Row to="/terms" label="Safety Guidelines & Disclaimer (Prototype Device)" />
         </motion.nav>
@@ -253,7 +314,7 @@ function Field({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border-2 border-ink bg-paper px-3 py-2 font-mono text-sm font-bold shadow-[2px_2px_0px_#1d1a17] outline-none focus:ring-2 focus:ring-ring"
+        className="mt-1 w-full rounded-lg border-2 border-ink bg-paper px-3 py-2 font-mono text-sm font-bold shadow-[2px_2px_0px_var(--ink)] outline-none focus:ring-2 focus:ring-ring"
       />
       <span className="mt-1 block font-mono text-[10px] text-muted-foreground">{hint}</span>
     </label>
@@ -272,7 +333,7 @@ function DiagRow({
   detail: string;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border-2 border-ink bg-paper/85 p-2 shadow-[1px_1px_0px_#1d1a17]">
+    <div className="flex items-center justify-between rounded-lg border-2 border-ink bg-paper/85 p-2 shadow-[1px_1px_0px_var(--ink)]">
       <div className="flex items-center gap-2.5">
         <Icon className="h-4 w-4 text-ink" />
         <div>

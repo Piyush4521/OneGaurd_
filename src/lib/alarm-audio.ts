@@ -20,11 +20,25 @@ function getAudioContext(): AudioContext {
   return audioCtx;
 }
 
+const MUTE_KEY = "oneguard_audio_muted_v1";
+
+export function isAudioMuted(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(MUTE_KEY) === "true";
+}
+
+export function setAudioMuted(muted: boolean): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(MUTE_KEY, muted ? "true" : "false");
+  if (muted) stopEmergencySiren();
+  window.dispatchEvent(new CustomEvent("oneguard-audio-mute-change", { detail: muted }));
+}
+
 /**
  * Starts the dual-tone emergency warble siren.
  */
 export function startEmergencySiren() {
-  if (isSirenPlaying) return;
+  if (isSirenPlaying || isAudioMuted()) return;
 
   try {
     const ctx = getAudioContext();
@@ -102,6 +116,7 @@ export function stopEmergencySiren() {
  * Play a short reassuring tactile chirp (e.g. settings saved, got it, preset selected)
  */
 export function playChirp(type: "success" | "tap" | "warn" = "tap") {
+  if (isAudioMuted()) return;
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;

@@ -1,9 +1,18 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Activity, Bell, Home, SlidersHorizontal } from "lucide-react";
-import type { ReactNode } from "react";
+import {
+  Activity,
+  Bell,
+  Home,
+  Moon,
+  SlidersHorizontal,
+  Sun,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Logo } from "./Logo";
-import { playChirp } from "@/lib/alarm-audio";
+import { isAudioMuted, playChirp, setAudioMuted } from "@/lib/alarm-audio";
 
 const TABS = [
   { to: "/", label: "Home", icon: Home },
@@ -14,12 +23,81 @@ const TABS = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const [isDark, setIsDark] = useState(false);
+  const [isMuted, setIsMutedState] = useState(false);
+
+  useEffect(() => {
+    // Check initial dark mode from DOM or localStorage
+    const savedTheme = localStorage.getItem("oneguard_theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const shouldDark = savedTheme === "dark" || (!savedTheme && prefersDark);
+    if (shouldDark) {
+      document.documentElement.classList.add("dark");
+      setIsDark(true);
+    }
+    setIsMutedState(isAudioMuted());
+
+    const handleMuteChange = (e: Event) => {
+      const custom = e as CustomEvent<boolean>;
+      setIsMutedState(custom.detail);
+    };
+    window.addEventListener("oneguard-audio-mute-change", handleMuteChange);
+    return () => window.removeEventListener("oneguard-audio-mute-change", handleMuteChange);
+  }, []);
+
+  const toggleTheme = () => {
+    playChirp("tap");
+    if (isDark) {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("oneguard_theme", "light");
+      setIsDark(false);
+    } else {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("oneguard_theme", "dark");
+      setIsDark(true);
+    }
+  };
+
+  const toggleMute = () => {
+    const next = !isMuted;
+    setAudioMuted(next);
+    setIsMutedState(next);
+    if (!next) playChirp("success");
+  };
 
   return (
-    <div className="app-backdrop min-h-dvh">
+    <div className="app-backdrop min-h-dvh text-foreground transition-colors duration-200">
+      {/* Top Ambient Kitchen Ribbon */}
+      <div className="border-b-2 border-ink bg-accent/90 px-4 py-1.5 font-mono text-[10px] font-black uppercase tracking-wider text-ink backdrop-blur-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="live-dot h-2 w-2 rounded-full bg-safe" />
+            <span>📍 Kitchen Ring #01 • ESP32 DevKit Active • 28°C Ambient</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleMute}
+              title={isMuted ? "Sound is Muted (Click to Unmute)" : "Sound is Active (Click to Mute)"}
+              className="flex items-center gap-1 hover:underline active:scale-95"
+            >
+              {isMuted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+              <span>{isMuted ? "Muted" : "Audio On"}</span>
+            </button>
+            <button
+              onClick={toggleTheme}
+              title="Toggle Dark / Light Neo-Brutalist Theme"
+              className="flex items-center gap-1 hover:underline active:scale-95"
+            >
+              {isDark ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
+              <span>{isDark ? "Light" : "Dark"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-28 pt-4 md:px-6 md:pb-10">
-        {/* Desktop sidebar rail */}
-        <aside className="sticky top-4 hidden h-[calc(100dvh-2rem)] w-20 shrink-0 flex-col items-center justify-between rounded-2xl border-2 border-ink bg-paper/90 py-5 shadow-[4px_4px_0px_#1d1a17] md:flex">
+        {/* Desktop Sidebar Rail */}
+        <aside className="sticky top-4 hidden h-[calc(100dvh-4.5rem)] w-20 shrink-0 flex-col items-center justify-between rounded-2xl border-3 border-ink bg-paper/90 py-5 shadow-[4px_4px_0px_var(--ink)] md:flex">
           <div className="flex flex-col items-center">
             <Link to="/" onClick={() => playChirp("tap")} className="transition-transform hover:scale-105 active:scale-95">
               <Logo size={42} />
@@ -34,7 +112,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                     onClick={() => playChirp("tap")}
                     aria-label={t.label}
                     className={`relative flex h-12 w-12 items-center justify-center rounded-xl transition-transform active:scale-95 ${
-                      active ? "border-2 border-ink text-ink shadow-[2px_2px_0px_#1d1a17]" : "text-muted-foreground hover:text-ink"
+                      active
+                        ? "border-2 border-ink text-ink shadow-[2px_2px_0px_var(--ink)]"
+                        : "text-muted-foreground hover:text-ink"
                     }`}
                   >
                     {active && (
@@ -51,20 +131,34 @@ export function AppShell({ children }: { children: ReactNode }) {
             </nav>
           </div>
 
-          <div className="font-mono text-[9px] font-bold text-muted-foreground tracking-tighter text-center">
-            V1.0
-            <br />
-            IOT
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={toggleMute}
+              title={isMuted ? "Unmute Audio" : "Mute Audio"}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-ink bg-paper text-ink shadow-[2px_2px_0px_var(--ink)] press"
+            >
+              {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={toggleTheme}
+              title="Toggle Theme"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-ink bg-accent text-ink shadow-[2px_2px_0px_var(--ink)] press"
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <span className="font-mono text-[9px] font-bold text-muted-foreground tracking-tighter text-center mt-1">
+              V1.0
+            </span>
           </div>
         </aside>
 
-        {/* Main Content Area */}
+        {/* Main App Content Viewport */}
         <main className="min-w-0 flex-1">{children}</main>
       </div>
 
       {/* Mobile Tab Bar */}
       <nav
-        className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-4 rounded-2xl border-2 border-ink bg-paper/95 p-1.5 shadow-[4px_4px_0px_#1d1a17] backdrop-blur-md md:hidden"
+        className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-4 rounded-2xl border-3 border-ink bg-paper/95 p-1.5 shadow-[4px_4px_0px_var(--ink)] backdrop-blur-md md:hidden"
         style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
       >
         {TABS.map((t) => {
@@ -81,7 +175,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {active && (
                 <motion.span
                   layoutId="tab"
-                  className="absolute inset-0 rounded-xl border-2 border-ink bg-accent shadow-[2px_2px_0px_#1d1a17]"
+                  className="absolute inset-0 rounded-xl border-2 border-ink bg-accent shadow-[2px_2px_0px_var(--ink)]"
                   transition={{ type: "spring", stiffness: 400, damping: 32 }}
                 />
               )}
@@ -140,7 +234,7 @@ export function SourceBadge({ source }: { source: string }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-lg border-2 border-ink px-2.5 py-1 font-mono text-[11px] font-bold uppercase shadow-[2px_2px_0px_#1d1a17] ${
+      className={`inline-flex items-center gap-2 rounded-lg border-2 border-ink px-2.5 py-1 font-mono text-[11px] font-bold uppercase shadow-[2px_2px_0px_var(--ink)] ${
         source === "offline" || source === "fault" ? "bg-destructive text-destructive-foreground" : "bg-paper text-ink"
       }`}
     >

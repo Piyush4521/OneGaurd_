@@ -113,6 +113,10 @@
   box-shadow: var(--shadow-brutal-sm);
 }
 
+@utility border-3 {
+  border-width: 3px;
+}
+
 @utility press {
   transition: transform 160ms var(--ease-out-app), box-shadow 160ms var(--ease-out-app);
   &:active { transform: translate(2px, 2px); box-shadow: 0 0 0 0 var(--ink); }

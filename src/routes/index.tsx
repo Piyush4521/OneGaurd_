@@ -32,7 +32,6 @@ import {
   LEAK_ALARM_PPM,
   LEAK_WARN_PPM,
   SAMPLE_DAILY,
-  SimulationScenario,
   estimateDaysLeft,
   gasLevel,
   getHinglishStatus,
@@ -55,11 +54,10 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { reading, online, cfg, scenario, updateScenario } = useTelemetry();
+  const { reading, online, cfg, deviceId } = useTelemetry();
   const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState(0);
   const [isSirenActive, setIsSirenActive] = useState(false);
-  const [showSimMenu, setShowSimMenu] = useState(false);
   const [modelAngle, setModelAngle] = useState<"front" | "iso" | "top">("iso");
 
   useEffect(() => {
@@ -69,12 +67,20 @@ function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
-  const pct = reading?.percent ?? 0;
-  const level = reading ? gasLevel(reading.gasPpm) : "safe";
-  const days = reading ? estimateDaysLeft(reading.lpgKg, SAMPLE_DAILY) : null;
-  const ago = reading ? Math.max(0, Math.round((now - reading.ts) / 1000)) : null;
+  const pct = reading?.percent ?? null;
+  const level: "safe" | "warn" | "alarm" =
+    reading?.leakState === "LEAK_ALARM"
+      ? "alarm"
+      : reading?.leakState === "WARNING"
+      ? "warn"
+      : reading?.gasPpm != null
+      ? gasLevel(reading.gasPpm)
+      : "safe";
 
-  // Auto-trigger audible alarm when critical leak occurs
+  const days = reading?.lpgKg != null ? estimateDaysLeft(reading.lpgKg, SAMPLE_DAILY) : null;
+  const ago = reading?.ts ? Math.max(0, Math.round((now - reading.ts) / 1000)) : null;
+
+  // Auto-trigger browser audible alarm when critical leak occurs
   useEffect(() => {
     if (level === "alarm" && !isSirenActive) {
       startEmergencySiren();
@@ -95,13 +101,13 @@ function Dashboard() {
     }
   };
 
-  const status = getHinglishStatus(pct, level, reading?.source ?? "simulated");
+  const status = getHinglishStatus(pct, level, reading?.source ?? "offline", reading?.leakState);
   const activePreset = CYLINDER_PRESETS.find((p) => p.capacityKg === cfg.capacityKg) ?? CYLINDER_PRESETS[0]!;
 
-  const netLpgKg = reading?.lpgKg ?? 8.81;
-  const approxChaiCups = Math.max(0, Math.round(netLpgKg * 58));
-  const approxMeals = Math.max(0, Math.round(netLpgKg * 2.6));
-  const approxBurnHours = Math.max(0, netLpgKg * 3.3).toFixed(1);
+  const netLpgKg = reading?.lpgKg ?? null;
+  const approxChaiCups = netLpgKg !== null ? Math.max(0, Math.round(netLpgKg * 58)) : null;
+  const approxMeals = netLpgKg !== null ? Math.max(0, Math.round(netLpgKg * 2.6)) : null;
+  const approxBurnHours = netLpgKg !== null ? Math.max(0, netLpgKg * 3.3).toFixed(1) : null;
 
   return (
     <Screen
@@ -112,17 +118,18 @@ function Dashboard() {
           {level === "alarm" && (
             <button
               onClick={toggleSiren}
+              title="Browser Web Audio Siren (Physical buzzer is not installed on hardware)"
               className="flex items-center gap-1.5 rounded-lg border-2 border-ink bg-destructive px-3 py-1.5 font-mono text-xs font-bold text-destructive-foreground shadow-[2px_2px_0px_var(--ink)] press"
             >
               {isSirenActive ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-              {isSirenActive ? "Mute Siren" : "Sound Siren"}
+              {isSirenActive ? "Mute Browser Siren" : "Test Browser Siren"}
             </button>
           )}
           <SourceBadge source={reading?.source ?? "connecting"} />
         </div>
       }
     >
-      {/* Critical Emergency Banner with hazard stripes */}
+      {/* Critical Emergency Banner */}
       <AnimatePresence>
         {level === "alarm" && (
           <motion.div
@@ -136,10 +143,10 @@ function Dashboard() {
                 <ShieldAlert className="mt-0.5 h-8 w-8 shrink-0 animate-bounce" />
                 <div>
                   <p className="font-display text-xl font-black uppercase tracking-tight md:text-2xl">
-                    🚨 Gas Leak Detected! ({reading?.gasPpm} PPM)
+                    🚨 Gas Leak Detected! {reading?.gasDo === 0 ? "(DO Triggered)" : ""}
                   </p>
                   <p className="mt-0.5 text-sm font-semibold text-destructive-foreground/90">
-                    Regulator knob band karein • Khidkiyan kholo • Electrical switch na chalayein • Call 1906 immediately.
+                    Regulator knob band karein • Khidkiyan kholo • Electrical switches mat chhuyein • Call 1906 immediately.
                   </p>
                 </div>
               </div>
@@ -156,7 +163,7 @@ function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* Cultural Hinglish Context Card & Interactive Demo Switcher */}
+      {/* Cultural Hinglish Context Card & Interactive Operating Mode Switcher */}
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-1 items-center gap-2.5 rounded-xl border-2 border-ink bg-paper/90 px-3.5 py-2.5 shadow-[2px_2px_0px_var(--ink)]">
           <span className="text-xl" role="img" aria-label="Status icon">
@@ -168,56 +175,19 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Demo Scenario Pill Selector */}
+        {/* Real Hardware Pairing Badge */}
         <div className="relative shrink-0">
-          <button
-            onClick={() => {
-              playChirp("tap");
-              setShowSimMenu((v) => !v);
-            }}
+          <Link
+            to="/settings"
+            onClick={() => playChirp("tap")}
             className="flex w-full items-center justify-between gap-2 rounded-xl border-2 border-ink bg-accent px-3 py-2 font-mono text-xs font-bold text-ink shadow-[2px_2px_0px_var(--ink)] press md:w-auto"
           >
-            <Zap className="h-3.5 w-3.5 text-ink" />
-            <span>Scenario: {scenario.toUpperCase().replace("_", " ")}</span>
-            <span className="text-[10px]">▼</span>
-          </button>
-
-          <AnimatePresence>
-            {showSimMenu && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 4 }}
-                className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl border-2 border-ink bg-paper p-1.5 shadow-[4px_4px_0px_var(--ink)]"
-              >
-                <p className="px-2 py-1 font-mono text-[10px] font-bold uppercase text-muted-foreground">Test Hardware States</p>
-                {(
-                  [
-                    { id: "normal", label: "🟢 Normal (62% Safe)", desc: "Steady reading" },
-                    { id: "low_gas", label: "🟡 Low Gas (12%)", desc: "Refill warning" },
-                    { id: "leak_emergency", label: "🚨 Gas Leak (Alarm)", desc: ">2400 ppm alert" },
-                    { id: "sensor_fault", label: "⚠️ Sensor Fault", desc: "HX711 disconnect" },
-                    { id: "offline", label: "📡 Offline Mode", desc: "Network timeout" },
-                  ] as const
-                ).map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      playChirp("success");
-                      updateScenario(item.id as SimulationScenario);
-                      setShowSimMenu(false);
-                    }}
-                    className={`flex w-full flex-col rounded-lg px-2.5 py-1.5 text-left transition-colors ${
-                      scenario === item.id ? "bg-accent font-bold" : "hover:bg-muted"
-                    }`}
-                  >
-                    <span className="text-xs font-bold text-ink">{item.label}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">{item.desc}</span>
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+            <Radio className={`h-3.5 w-3.5 ${reading?.source === "live" ? "text-safe animate-pulse" : "text-ink"}`} />
+            <span>ID: {deviceId}</span>
+            <span className="rounded bg-paper px-1.5 py-0.5 text-[10px] font-black uppercase text-ink">
+              {reading?.source ?? "offline"}
+            </span>
+          </Link>
         </div>
       </div>
 
@@ -232,17 +202,17 @@ function Dashboard() {
               <p className="label-xs">LPG Gas Remaining</p>
               <div className="flex items-baseline gap-1">
                 <p className="font-display text-6xl font-black leading-none tabular-nums text-ink md:text-7xl">
-                  {reading ? Math.round(pct) : "--"}
+                  {pct !== null ? Math.round(pct) : "--"}
                 </p>
                 <span className="font-display text-3xl font-black text-ink">%</span>
               </div>
               <p className="mt-1 font-mono text-sm">
-                {reading ? (
+                {netLpgKg !== null ? (
                   <>
-                    <span className="font-bold text-ink">{reading.lpgKg.toFixed(2)} kg</span> net LPG of {cfg.capacityKg} kg
+                    <span className="font-bold text-ink">{netLpgKg.toFixed(2)} kg</span> net LPG of {cfg.capacityKg} kg
                   </>
                 ) : (
-                  "Waiting for reading..."
+                  <span className="font-bold text-destructive">Weight Sensor Disconnected / Fault</span>
                 )}
               </p>
             </div>
@@ -256,19 +226,25 @@ function Dashboard() {
             </Link>
           </div>
 
-          {/* Chai & Meal Cultural Metric Chips */}
+          {/* Cultural Metric Chips */}
           <div className="mt-2 grid grid-cols-3 gap-1.5">
             <div className="flex items-center gap-1 rounded-lg border border-ink/20 bg-paper/90 px-2 py-1 text-ink shadow-[1px_1px_0px_var(--ink)]">
               <Coffee className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="font-mono text-[10px] font-bold leading-tight">~{approxChaiCups} Chai ☕</span>
+              <span className="font-mono text-[10px] font-bold leading-tight">
+                {approxChaiCups !== null ? `~${approxChaiCups} Chai ☕` : "-- Chai"}
+              </span>
             </div>
             <div className="flex items-center gap-1 rounded-lg border border-ink/20 bg-paper/90 px-2 py-1 text-ink shadow-[1px_1px_0px_var(--ink)]">
               <Utensils className="h-3.5 w-3.5 text-accent shrink-0" />
-              <span className="font-mono text-[10px] font-bold leading-tight">~{approxMeals} Meals 🍲</span>
+              <span className="font-mono text-[10px] font-bold leading-tight">
+                {approxMeals !== null ? `~${approxMeals} Meals 🍲` : "-- Meals"}
+              </span>
             </div>
             <div className="flex items-center gap-1 rounded-lg border border-ink/20 bg-paper/90 px-2 py-1 text-ink shadow-[1px_1px_0px_var(--ink)]">
               <Flame className="h-3.5 w-3.5 text-destructive shrink-0" />
-              <span className="font-mono text-[10px] font-bold leading-tight">~{approxBurnHours}h Burn 🔥</span>
+              <span className="font-mono text-[10px] font-bold leading-tight">
+                {approxBurnHours !== null ? `~${approxBurnHours}h Burn 🔥` : "--h Burn"}
+              </span>
             </div>
           </div>
 
@@ -276,7 +252,7 @@ function Dashboard() {
           <div className="relative -mx-4 my-auto h-64 md:h-72">
             {mounted && (
               <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center font-mono text-xs">Loading 3D Engine...</div>}>
-                <Cylinder3D fill={pct / 100} shellColor={activePreset.color} isAlarm={level === "alarm"} />
+                <Cylinder3D fill={pct !== null ? pct / 100 : 0} shellColor={activePreset.color} isAlarm={level === "alarm"} />
               </Suspense>
             )}
 
@@ -314,33 +290,37 @@ function Dashboard() {
                 className={`h-full ${
                   level === "alarm"
                     ? "bg-destructive"
-                    : pct < 15
+                    : pct !== null && pct < 15
                     ? "bg-destructive"
-                    : pct < 25
+                    : pct !== null && pct < 25
                     ? "bg-warn"
                     : "bg-primary"
                 }`}
-                animate={{ width: `${pct}%` }}
+                animate={{ width: `${pct ?? 0}%` }}
                 transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
               />
             </div>
           </div>
         </motion.section>
 
-        {/* Leak status tile with Live Oscilloscope Waveform */}
+        {/* MQ-6 Gas Sensor Tile: Separate AO & DO states */}
         <motion.section
           variants={rise}
           className={`tile col-span-2 flex flex-col justify-between border-3 border-ink shadow-[4px_4px_0px_var(--ink)] ${
-            level === "alarm"
+            reading?.leakState === "SENSOR_FAULT"
+              ? "!bg-muted text-ink"
+              : level === "alarm"
               ? "!bg-destructive text-destructive-foreground animate-pulse"
               : level === "warn"
               ? "!bg-warn text-ink"
               : "!bg-safe text-ink"
           }`}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 border-ink bg-paper shadow-[2px_2px_0px_var(--ink)]">
-              {level === "alarm" ? (
+              {reading?.leakState === "SENSOR_FAULT" ? (
+                <AlertTriangle className="h-7 w-7 text-ink" strokeWidth={2.4} />
+              ) : level === "alarm" ? (
                 <ShieldAlert className="h-7 w-7 text-destructive" strokeWidth={2.4} />
               ) : level === "warn" ? (
                 <AlertTriangle className="h-7 w-7 text-ink" strokeWidth={2.4} />
@@ -351,50 +331,72 @@ function Dashboard() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="font-mono text-[11px] font-bold uppercase tracking-wider">MQ-6 Gas Sensor</span>
-                {level === "safe" && <CheckCircle2 className="h-3.5 w-3.5" />}
+                <span className="rounded border border-ink/30 bg-paper/80 px-1.5 py-0.5 font-mono text-[9px] font-black uppercase text-ink">
+                  {reading?.leakState ?? "SAFE"}
+                </span>
               </div>
-              <p className="font-display text-2xl font-black leading-tight">
-                {level === "alarm" ? "Gas Leak! Khidkiyan Kholo" : level === "warn" ? "Gas Smell Detected" : "Sab Theek Hai"}
+              <p className="font-display text-xl font-black leading-tight md:text-2xl">
+                {reading?.leakState === "SENSOR_FAULT"
+                  ? "Sensor Fault / Check MQ-6"
+                  : level === "alarm"
+                  ? "Gas Leak! Khidkiyan Kholo"
+                  : level === "warn"
+                  ? "Gas Smell Detected"
+                  : "Sab Theek Hai"}
               </p>
-              <p className="font-mono text-[11px] opacity-90">
-                {level === "alarm"
-                  ? "Immediate hazard (>2000 ppm)"
+              <p className="font-mono text-[10px] opacity-90">
+                {reading?.leakState === "SENSOR_FAULT"
+                  ? "Analog/Digital connection fault on GPIO 34/27"
+                  : level === "alarm"
+                  ? "Immediate leak trip (DO Low or AO >2000 ppm)"
                   : level === "warn"
                   ? "Above warning threshold (>1000 ppm)"
-                  : "Air quality clean & normal"}
+                  : "Sensor indication normal & clean"}
               </p>
-            </div>
-            <div className="text-right">
-              <p className="font-mono text-3xl font-black tabular-nums">{reading?.gasPpm ?? "--"}</p>
-              <p className="font-mono text-[11px] uppercase">PPM</p>
             </div>
           </div>
 
-          {/* Live Waveform Oscilloscope Graphic */}
-          <div className="mt-3 flex items-center justify-between rounded-lg border border-ink/20 bg-paper/60 px-3 py-1.5">
-            <div className="flex items-center gap-2">
-              <Radio className="h-3.5 w-3.5 text-ink animate-pulse" />
-              <span className="font-mono text-[10px] font-bold uppercase text-ink">Real-time Gas Waveform</span>
+          {/* Separate AO Analog & DO Digital Sensor Panels */}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="rounded-lg border-2 border-ink bg-paper/90 p-2 shadow-[1px_1px_0px_var(--ink)]">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] font-bold uppercase text-muted-foreground">Analog (AO)</span>
+                <span className="font-mono text-[9px] text-ink font-bold">GPIO 34</span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between">
+                <p className="font-mono text-lg font-black text-ink tabular-nums">
+                  {reading?.gasRaw !== null && reading?.gasRaw !== undefined ? reading.gasRaw : "--"}
+                </p>
+                <span className="font-mono text-[10px] text-muted-foreground">/ 4095</span>
+              </div>
+              <p className="font-mono text-[9px] text-muted-foreground truncate">
+                {reading?.gasPpm !== null && reading?.gasPpm !== undefined ? `~${reading.gasPpm} PPM equiv` : "Awaiting ADC"}
+              </p>
             </div>
-            {/* SVG Waveform Simulation */}
-            <svg width="120" height="20" viewBox="0 0 120 20" className="overflow-visible">
-              <motion.path
-                d={
-                  level === "alarm"
-                    ? "M0,10 L15,10 L25,2 L35,18 L45,3 L55,17 L65,1 L75,19 L85,2 L95,18 L105,10 L120,10"
-                    : "M0,10 Q15,4 30,10 T60,10 T90,10 T120,10"
-                }
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                animate={{
-                  strokeDashoffset: [0, -40],
-                }}
-                transition={{ repeat: Infinity, duration: level === "alarm" ? 0.4 : 1.6, ease: "linear" }}
-              />
-            </svg>
+
+            <div className="rounded-lg border-2 border-ink bg-paper/90 p-2 shadow-[1px_1px_0px_var(--ink)]">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] font-bold uppercase text-muted-foreground">Digital (DO)</span>
+                <span className="font-mono text-[9px] text-ink font-bold">GPIO 27</span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between">
+                <p
+                  className={`font-mono text-base font-black truncate ${
+                    reading?.gasDo === 0 ? "text-destructive" : reading?.gasDo === 1 ? "text-safe" : "text-ink"
+                  }`}
+                >
+                  {reading?.gasDo === 0 ? "TRIP (0)" : reading?.gasDo === 1 ? "SAFE (1)" : "--"}
+                </p>
+              </div>
+              <p className="font-mono text-[9px] text-muted-foreground truncate">
+                LM393 Active-LOW
+              </p>
+            </div>
           </div>
+
+          <p className="mt-1.5 text-center font-mono text-[9px] text-ink/70">
+            Relative sensor response indication • Not certified laboratory PPM
+          </p>
         </motion.section>
 
         {/* Stat: Refill in */}
@@ -410,9 +412,13 @@ function Dashboard() {
         <Stat
           icon={Scale}
           label="Gross weight"
-          value={reading ? reading.grossKg.toFixed(2) : "--"}
+          value={reading?.grossKg !== null && reading?.grossKg !== undefined ? reading.grossKg.toFixed(2) : "--"}
           unit="kg"
-          note={`Tare: ${cfg.tareKg} kg • Net: ${reading ? reading.lpgKg.toFixed(2) : "--"} kg`}
+          note={
+            reading?.grossKg !== null && reading?.grossKg !== undefined
+              ? `Tare: ${cfg.tareKg} kg • Net: ${reading.lpgKg !== null ? reading.lpgKg.toFixed(2) : "--"} kg`
+              : "HX711 Disconnected / Check GPIO 25 & 26"
+          }
         />
 
         {/* Device Health & Connectivity Bar */}
@@ -421,7 +427,7 @@ function Dashboard() {
             icon={online && reading?.source !== "offline" ? Wifi : WifiOff}
             label="Network"
             value={online && reading?.source !== "offline" ? `${reading?.rssi ?? "--"} dBm` : "Offline"}
-            sub={online ? "Wi-Fi Connected" : "Check Router"}
+            sub={reading?.source === "live" ? "ESP32 Live" : reading?.source === "stale" ? "Data Stale (>60s)" : reading?.source === "fault" ? "Sensor Fault" : "ESP32 Offline"}
           />
           <Mini
             icon={reading && reading.batteryPct > 90 ? BatteryCharging : BatteryMedium}

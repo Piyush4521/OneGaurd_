@@ -36,7 +36,7 @@ describe("telemetry rules", () => {
   });
 
   it("generates unambiguous emergency instructions during gas leak alarm", () => {
-    const status = getHinglishStatus(50, "alarm", "simulated");
+    const status = getHinglishStatus(50, "alarm", "live");
     expect(status.greeting).toBe("EMERGENCY ALERT");
     expect(status.headline).toContain("GAS LEAK");
     expect(status.subtext).toContain("1906");

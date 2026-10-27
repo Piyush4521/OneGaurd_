@@ -36,9 +36,10 @@ export const Route = createFileRoute("/settings")({
 type BIPEvent = Event & { prompt: () => Promise<void> };
 
 function Settings() {
-  const { cfg, updateConfig, reading } = useTelemetry();
+  const { cfg, updateConfig, reading, deviceId, updateDeviceId } = useTelemetry();
   const [tare, setTare] = useState(String(cfg.tareKg));
   const [cap, setCap] = useState(String(cfg.capacityKg));
+  const [devId, setDevId] = useState(deviceId);
   const [saved, setSaved] = useState(false);
   const [install, setInstall] = useState<BIPEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -49,6 +50,10 @@ function Settings() {
     setTare(String(cfg.tareKg));
     setCap(String(cfg.capacityKg));
   }, [cfg]);
+
+  useEffect(() => {
+    if (deviceId) setDevId(deviceId);
+  }, [deviceId]);
 
   useEffect(() => {
     const h = (e: Event) => {
@@ -88,6 +93,9 @@ function Settings() {
         capacityKg: parsedCap,
         presetName: `${parsedCap.toFixed(1)} KG CUSTOM`,
       });
+      if (devId && devId.trim().length > 0 && updateDeviceId) {
+        updateDeviceId(devId.trim());
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     }
@@ -213,6 +221,12 @@ function Settings() {
             value={cap}
             onChange={setCap}
           />
+          <Field
+            label="Firebase Device ID"
+            hint="Hardware device node in RTDB (default: oneguard_kitchen_01)"
+            value={devId}
+            onChange={setDevId}
+          />
 
           <button
             type="submit"
@@ -235,27 +249,27 @@ function Settings() {
             <div className="space-y-2">
               <DiagRow
                 icon={Scale}
-                name="HX711 24-Bit ADC (GPIO 18/19)"
-                status="Calibrated"
-                detail="4x 50kg half-bridge load cells"
+                name="HX711 24-Bit ADC (GPIO 25 / 26)"
+                status={reading?.grossKg != null ? "Active" : "Ready"}
+                detail="DOUT: GPIO 25 • SCK: GPIO 26"
               />
               <DiagRow
                 icon={Flame}
-                name="MQ-6 Gas Sensor (GPIO 34 ADC1)"
-                status="Armed"
-                detail="2:1 voltage divider conditioned"
+                name="MQ-6 Gas Sensor (AO: 34 / DO: 27)"
+                status={reading?.leakState === "SENSOR_FAULT" ? "Fault" : "Armed"}
+                detail="Analog: GPIO 34 (2:1 divider) • Digital: GPIO 27"
               />
               <DiagRow
                 icon={Cpu}
-                name="DS3231 Precision RTC (I2C 21/22)"
+                name="DS3231 Precision RTC (I2C 21 / 22)"
                 status="Synced"
-                detail="Battery-backed hardware clock"
+                detail="SDA: GPIO 21 • SCL: GPIO 22"
               />
               <DiagRow
                 icon={ShieldCheck}
-                name="Autonomous Siren (GPIO 25)"
-                status="Online"
-                detail="Triggers independently of Wi-Fi"
+                name="Physical Buzzer"
+                status="Not Installed"
+                detail="No buzzer GPIO • PWA Web Audio siren active"
               />
             </div>
           </div>

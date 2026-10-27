@@ -7,10 +7,10 @@
 | **Microcontroller** | ESP32-WROOM-32 DevKit V1 (30 or 38-pin) | 5V (USB/VIN) / 3.3V (VCC) | 3.3V | Wi-Fi 802.11 b/g/n, BLE | ~80mA avg, up to 240mA peak during Wi-Fi transmission |
 | **Load Cells** | 4x 50kg 3-wire half-bridge strain gauges | Up to 10V excitation | Analog strain | 3-wire half bridge (Wheatstone bridge configuration) | Combined 200kg gross max rated capacity, safe working capacity ~100kg |
 | **Combinator** | SparkFun Load Sensor Combinator v1.1 | 5V / 3.3V excitation | Analog (Wheatstone) | 4 load cells in -> 4-wire Wheatstone Bridge out (RED, BLK, WHT, GRN) | Forms full Wheatstone bridge with temperature compensation |
-| **ADC Amplifier** | HX711 24-Bit ADC module | 2.7V - 5.5V (Recommended: 5V for excitation, 3.3V digital logic) | 3.3V tolerant | 2-wire proprietary serial (DT, SCK) | High precision 24-bit differential input; 10Hz or 80Hz sample rate |
-| **Gas Sensor** | MQ-6 (LPG, Isobutane, Propane detector) | 5V ± 0.1V (Heater & Circuit) | Analog out: 0-5V (Requires divider to 3.3V for ESP32 ADC) | Analog (AO) + Digital Comparator (DO) | Internal heater ~150mA at 5V (~750mW). Must NOT be powered from ESP32 3.3V pin! |
-| **RTC Module** | DS3231 High-Precision I2C RTC | 2.3V - 5.5V (Recommended 3.3V) | 3.3V I2C | I2C (SDA, SCL) | Battery backed (CR2032), ±2ppm accuracy |
-| **Buzzer** | Active 5V / 3.3V Piezo Buzzer | 3.3V - 5V | Digital GPIO (via transistor/FET or direct if low current) | Direct GPIO or 2N2222 drive | Local emergency audible alert (failsafe without internet) |
+| **ADC Amplifier** | HX711 24-Bit ADC module | 2.7V - 5.5V (Recommended: 5V excitation, 3.3V logic) | 3.3V tolerant | 2-wire serial (`DOUT`: GPIO 25, `SCK`: GPIO 26) | High precision 24-bit differential input |
+| **Gas Sensor** | MQ-6 (LPG, Isobutane, Propane detector) | 5V ± 0.1V (Heater & Circuit) | Analog out: 0-5V (Divider to 3.3V for ESP32 ADC) | Analog (`AO`: GPIO 34) + Digital Comparator (`DO`: GPIO 27) | Internal heater ~150mA at 5V (~750mW). Must NOT be powered from ESP32 3.3V pin! |
+| **RTC Module** | DS3231 High-Precision I2C RTC | 2.3V - 5.5V (Recommended 3.3V) | 3.3V I2C | I2C (`SDA`: GPIO 21, `SCL`: GPIO 22) | Battery backed (CR2032), ±2ppm accuracy |
+| **Buzzer** | Not Installed | N/A | N/A | None | **Buzzer is not installed.** Do not configure a buzzer GPIO. Audio alerts are handled by PWA browser Web Audio and cloud/phone dispatch. |
 | **Filtering Capacitors** | Electrolytic (100µF, 10µF) & Ceramic (0.1µF) | >= 16V | N/A | Across power rails (5V, 3.3V, HX711 VDD/VCC) | Decoupling and noise suppression on load-cell and sensor supply |
 
 ---
@@ -19,24 +19,24 @@
 
 > [!CAUTION]
 > **Power Rail Isolation & Capacity:**
-> 1. The **MQ-6 heater** consumes ~150–160mA continuously at 5.0V. Connecting the MQ-6 heater to the ESP32's onboard 3.3V regulator WILL cause voltage sag, brownout resets, and inaccurate ADC readings.
+> 1. The **MQ-6 heater** consumes ~150–160mA continuously at 5.0V. Connecting the MQ-6 heater to the ESP32's onboard 3.3V regulator WILL cause voltage sag, brownout resets, and inaccurate ADC readings. Use a dedicated 5V rail.
 > 2. The **HX711** analog excitation benefits from a stable, low-noise supply. Use a dedicated 5V regulated rail with decoupling capacitors (10µF + 0.1µF) right at the HX711 VCC/AVDD pins.
 > 3. Provide a common star-ground topology to prevent ground loops between the high-current MQ-6 heater return and the sensitive HX711 microvolt signal ground.
 
 ---
 
-## 3. ESP32 DevKit Pinout Mapping
+## 3. ESP32 DevKit Confirmed Pinout Mapping
 
-| ESP32 GPIO | Direction | Connected Device | Function | Safety / Strapping Considerations |
+| ESP32 GPIO | Direction | Connected Device | Function | Safety / Electrical Considerations |
 | :--- | :--- | :--- | :--- | :--- |
+| **GPIO 25** | Input | HX711 ADC | DOUT / DT (Data Output) | Safe general input pin. 24-bit strain-gauge serial data. |
+| **GPIO 26** | Output | HX711 ADC | SCK / CLK (Serial Clock) | Safe general output pin. Serial clock pulses to read HX711. |
+| **GPIO 34** | Analog In | MQ-6 AO (via 2:1 divider) | Gas Level Analog Voltage | Input-only GPIO (ADC1_CH6). Not affected by Wi-Fi ADC2 conflicts! |
+| **GPIO 27** | Digital In | MQ-6 DO (Digital threshold) | Gas Threshold Comparator | Digital input (LM393 comparator). Active-LOW (0 on threshold trip). Dedicated to MQ-6 DO (not buzzer!). |
 | **GPIO 21** | In/Out | DS3231 RTC | I2C SDA (Serial Data) | Hardware I2C default with 4.7kΩ pull-up to 3.3V |
 | **GPIO 22** | Out | DS3231 RTC | I2C SCL (Serial Clock) | Hardware I2C default with 4.7kΩ pull-up to 3.3V |
-| **GPIO 19** | Input | HX711 ADC | DOUT / DT (Data Output) | Safe general input pin |
-| **GPIO 18** | Output | HX711 ADC | SCK / PD_SCK (Serial Clock) | Safe general output pin |
-| **GPIO 34** | Analog In | MQ-6 AO (via 2:1 divider) | Gas Level Analog Voltage | Input-only GPIO (ADC1_CH6). Not affected by Wi-Fi ADC2 conflicts! |
-| **GPIO 35** | Digital In | MQ-6 DO (Digital threshold) | Gas Threshold Interrupt | Input-only GPIO. Active LOW when threshold exceeded. |
-| **GPIO 25** | Output | Local Buzzer / Alarm | Audible local emergency siren | Driven via NPN transistor (e.g. 2N2222) or MOSFET |
-| **GPIO 2** | Output | Status LED / NeoPixel | Local state indicator | Strapping pin (must be floating or LOW during boot) |
+| **GPIO 2** | Output | Status LED | Local state indicator | Strapping pin (must be floating or LOW during boot). Flashes during local emergency. |
+| **Buzzer** | None | Not Installed | None | **Do not configure any buzzer GPIO.** |
 
 > [!IMPORTANT]
 > **ADC Pin Selection Warning:**
@@ -85,5 +85,5 @@ The MQ-6 output voltage ranges from 0.1V up to ~4.5V depending on gas concentrat
 ## 6. Safety and Validation Rules
 
 1. **Never use flames or open LPG releases for testing.** Use clean butane lighter headspace (depressing valve gently without ignition at a safe distance in ventilated outdoor conditions) for threshold trigger verification.
-2. **Local Autonomous Alarm:** If MQ-6 exceeds the safety threshold ($>1000\text{ ppm}$ warning, $>2000\text{ ppm}$ critical), the local buzzer must sound immediately via hardware interrupt/timer, even if Wi-Fi or Firebase is completely disconnected.
+2. **Local Autonomous Alarm:** If MQ-6 exceeds the safety threshold ($>1000\text{ ppm}$ warning, $>2000\text{ ppm}$ critical or DO digital trigger), local fail-safe triggers immediately (high-frequency status LED flash and event buffering) independent of Wi-Fi or Firebase connectivity. Physical buzzer is not installed.
 3. **Stale Data Guard:** If telemetry is not received for $>60\text{ seconds}$, dashboard transitions to `stale`, and if $>180\text{ seconds}$, to `offline`.

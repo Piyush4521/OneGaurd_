@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { database, ensureAuth } from "@/lib/firebase";
+import { ref, onValue, off, type DataSnapshot } from "firebase/database";
 
 /**
- * Data source of a reading. Until the ESP32 + Firebase link is configured,
- * readings are marked "simulated" unless a live device is streaming.
+ * Data source of a reading. When live ESP32 hardware is connected,
+ * source is 'live', 'stale', 'offline', or 'fault'.
  */
-export type DataSource = "live" | "simulated" | "stale" | "offline" | "fault";
+export type DataSource = "live" | "stale" | "offline" | "fault";
 
 export type CylinderConfig = {
   tareKg: number;
@@ -12,18 +14,22 @@ export type CylinderConfig = {
   presetName?: string | undefined;
 };
 
-export type SimulationScenario = "normal" | "low_gas" | "leak_emergency" | "sensor_fault" | "offline";
+export type LeakState = "SAFE" | "WARNING" | "LEAK_ALARM" | "SENSOR_FAULT";
 
 export type Reading = {
   ts: number;
-  grossKg: number;
-  lpgKg: number;
-  percent: number;
-  gasPpm: number;
+  grossKg: number | null;
+  lpgKg: number | null;
+  percent: number | null;
+  gasPpm?: number | null;
+  gasRaw?: number | null; // MQ-6 AO raw ADC reading (0-4095)
+  gasDo?: number | null;  // MQ-6 DO pin level (0 = triggered, 1 = normal)
+  leakState?: LeakState;
   batteryPct: number;
   rssi: number;
   source: DataSource;
-  scenario?: SimulationScenario;
+  deviceOnline?: boolean;
+  sensorFault?: boolean;
 };
 
 export type CylinderPreset = {
@@ -81,6 +87,8 @@ export const DEFAULT_CONFIG: CylinderConfig = {
   presetName: CYLINDER_PRESETS[0]!.shortName,
 };
 
+export const DEFAULT_DEVICE_ID = "oneguard_kitchen_01";
+
 export const LEAK_WARN_PPM = 1000;
 export const LEAK_ALARM_PPM = 2000;
 
@@ -90,7 +98,8 @@ export function lpgFromGross(grossKg: number, cfg: CylinderConfig) {
 }
 
 /** Linear estimate from average daily usage. Returns null when usage is too small to estimate. */
-export function estimateDaysLeft(lpgKg: number, dailyKg: number[]) {
+export function estimateDaysLeft(lpgKg: number | null, dailyKg: number[]) {
+  if (lpgKg === null) return null;
   const usable = dailyKg.filter((d) => d > 0);
   if (usable.length < 3) return null;
   const avg = usable.reduce((a, b) => a + b, 0) / usable.length;
@@ -104,11 +113,32 @@ export function gasLevel(ppm: number): "safe" | "warn" | "alarm" {
   return "safe";
 }
 
-// Sample usage for the last 14 days (kg/day), clearly labelled as simulated in the UI.
+// Sample usage for the last 14 days (kg/day), clearly labelled as reference.
 export const SAMPLE_DAILY = [0.42, 0.38, 0.51, 0.33, 0.47, 0.6, 0.55, 0.4, 0.36, 0.44, 0.52, 0.39, 0.48, 0.45];
 
 const STORAGE_KEY_CFG = "oneguard_cylinder_config_v1";
-const STORAGE_KEY_SCENARIO = "oneguard_sim_scenario_v1";
+const STORAGE_KEY_DEVICE = "oneguard_device_id_v1";
+
+export function loadSavedDeviceId(): string {
+  if (typeof window === "undefined") return DEFAULT_DEVICE_ID;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DEVICE);
+    if (raw && raw.trim().length > 0) return raw.trim();
+  } catch {
+    // fallback
+  }
+  return DEFAULT_DEVICE_ID;
+}
+
+export function saveSavedDeviceId(id: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_DEVICE, id.trim());
+    window.dispatchEvent(new CustomEvent("oneguard-device-change", { detail: id.trim() }));
+  } catch {
+    // ignore
+  }
+}
 
 export function loadSavedConfig(): CylinderConfig {
   if (typeof window === "undefined") return DEFAULT_CONFIG;
@@ -138,33 +168,15 @@ export function saveConfig(cfg: CylinderConfig) {
   }
 }
 
-export function loadSavedScenario(): SimulationScenario {
-  if (typeof window === "undefined") return "normal";
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_SCENARIO);
-    if (raw === "normal" || raw === "low_gas" || raw === "leak_emergency" || raw === "sensor_fault" || raw === "offline") {
-      return raw;
-    }
-  } catch {
-    // fallback
-  }
-  return "normal";
-}
-
-export function saveSavedScenario(s: SimulationScenario) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEY_SCENARIO, s);
-    window.dispatchEvent(new CustomEvent("oneguard-scenario-change", { detail: s }));
-  } catch {
-    // ignore
-  }
-}
-
 /**
  * Return dynamic, culturally warm Indian Hinglish microcopy
  */
-export function getHinglishStatus(percent: number, level: "safe" | "warn" | "alarm", source: DataSource): {
+export function getHinglishStatus(
+  percent: number | null,
+  level: "safe" | "warn" | "alarm",
+  source: DataSource,
+  leakState?: LeakState
+): {
   headline: string;
   subtext: string;
   greeting: string;
@@ -177,10 +189,10 @@ export function getHinglishStatus(percent: number, level: "safe" | "warn" | "ala
   else if (hour >= 17 && hour < 22) greeting = "Shubh Sandhya";
   else greeting = "Shubh Ratri";
 
-  if (source === "fault") {
+  if (source === "fault" || leakState === "SENSOR_FAULT") {
     return {
-      headline: "Sensor wiring check karein",
-      subtext: "Load cell or MQ-6 sensor not responding. Check connections.",
+      headline: "Sensor check karein",
+      subtext: "HX711 scale ya MQ-6 gas sensor fault detect hua.",
       greeting,
       emoji: "⚠️",
     };
@@ -195,7 +207,7 @@ export function getHinglishStatus(percent: number, level: "safe" | "warn" | "ala
     };
   }
 
-  if (level === "alarm") {
+  if (level === "alarm" || leakState === "LEAK_ALARM") {
     return {
       headline: "GAS LEAK DETECTED! Khidkiyan kholo!",
       subtext: "Regulator band karein, switches ko mat chhuyein, call 1906 immediately.",
@@ -204,12 +216,21 @@ export function getHinglishStatus(percent: number, level: "safe" | "warn" | "ala
     };
   }
 
-  if (level === "warn") {
+  if (level === "warn" || leakState === "WARNING") {
     return {
       headline: "Halka gas smell detect hua",
       subtext: "Burner ya regulator knob check karein. Ventilation banaye rakhein.",
       greeting: "Caution",
       emoji: "⚠️",
+    };
+  }
+
+  if (percent === null) {
+    return {
+      headline: "Reading check karein",
+      subtext: "Scale connection verified hone ka intezar hai.",
+      greeting,
+      emoji: "⚖️",
     };
   }
 
@@ -248,142 +269,143 @@ export function getHinglishStatus(percent: number, level: "safe" | "warn" | "ala
   };
 }
 
-export function useTelemetry(initialCfg?: CylinderConfig, intervalMs = 2000) {
+export function useTelemetry(initialCfg?: CylinderConfig) {
   const [cfg, setCfg] = useState<CylinderConfig>(() => initialCfg ?? loadSavedConfig());
-  const [scenario, setScenario] = useState<SimulationScenario>(() => loadSavedScenario());
+  const [deviceId, setDeviceId] = useState<string>(() => loadSavedDeviceId());
   const [online, setOnline] = useState(true);
   const [reading, setReading] = useState<Reading | null>(null);
-
-  // Keep gross weight stateful
-  const gross = useRef(cfg.tareKg + cfg.capacityKg * 0.62);
 
   // Sync when config changes
   useEffect(() => {
     if (initialCfg) setCfg(initialCfg);
   }, [initialCfg]);
 
-  // Listen for scenario changes across tabs or simulator controls
+  // Listen for device ID pairing changes
   useEffect(() => {
-    const handleScenarioEvent = (e: Event) => {
-      const custom = e as CustomEvent<SimulationScenario>;
-      if (custom.detail) setScenario(custom.detail);
+    const handleDeviceEvent = (e: Event) => {
+      const custom = e as CustomEvent<string>;
+      if (custom.detail) setDeviceId(custom.detail);
     };
-    window.addEventListener("oneguard-scenario-change", handleScenarioEvent);
-    return () => window.removeEventListener("oneguard-scenario-change", handleScenarioEvent);
+    window.addEventListener("oneguard-device-change", handleDeviceEvent);
+    return () => {
+      window.removeEventListener("oneguard-device-change", handleDeviceEvent);
+    };
   }, []);
 
+  // Online / offline window events
   useEffect(() => {
     const on = () => setOnline(true);
     const off = () => setOnline(false);
     setOnline(navigator.onLine);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
-
-    const tick = () => {
-      if (scenario === "offline") {
-        setReading({
-          ts: Date.now() - 320000, // 5+ min ago (stale/offline)
-          grossKg: cfg.tareKg + cfg.capacityKg * 0.45,
-          lpgKg: cfg.capacityKg * 0.45,
-          percent: 45,
-          gasPpm: 210,
-          batteryPct: 42,
-          rssi: -88,
-          source: "offline",
-          scenario,
-        });
-        return;
-      }
-
-      if (scenario === "sensor_fault") {
-        setReading({
-          ts: Date.now(),
-          grossKg: 0,
-          lpgKg: 0,
-          percent: 0,
-          gasPpm: 0,
-          batteryPct: 15,
-          rssi: -65,
-          source: "fault",
-          scenario,
-        });
-        return;
-      }
-
-      if (scenario === "leak_emergency") {
-        const noisyGross = cfg.tareKg + cfg.capacityKg * 0.54 + (Math.random() - 0.5) * 0.02;
-        const { lpgKg, percent } = lpgFromGross(noisyGross, cfg);
-        setReading({
-          ts: Date.now(),
-          grossKg: noisyGross,
-          lpgKg,
-          percent,
-          gasPpm: Math.round(2420 + Math.random() * 250), // Critical >2000 ppm
-          batteryPct: 82,
-          rssi: -56,
-          source: "simulated",
-          scenario,
-        });
-        return;
-      }
-
-      if (scenario === "low_gas") {
-        const lowGross = cfg.tareKg + cfg.capacityKg * 0.12 + (Math.random() - 0.5) * 0.01;
-        const { lpgKg, percent } = lpgFromGross(lowGross, cfg);
-        setReading({
-          ts: Date.now(),
-          grossKg: lowGross,
-          lpgKg,
-          percent,
-          gasPpm: Math.round(200 + Math.random() * 40),
-          batteryPct: 78,
-          rssi: -60,
-          source: "simulated",
-          scenario,
-        });
-        return;
-      }
-
-      // Normal simulation scenario
-      gross.current -= 0.0004 + Math.random() * 0.0004;
-      if (gross.current < cfg.tareKg + 0.5) {
-        gross.current = cfg.tareKg + cfg.capacityKg * 0.72; // Reset loop if exhausted
-      }
-      const noisy = gross.current + (Math.random() - 0.5) * 0.01;
-      const { lpgKg, percent } = lpgFromGross(noisy, cfg);
-      setReading({
-        ts: Date.now(),
-        grossKg: noisy,
-        lpgKg,
-        percent,
-        gasPpm: Math.round(195 + Math.random() * 55),
-        batteryPct: 88,
-        rssi: -58 - Math.round(Math.random() * 4),
-        source: navigator.onLine ? "simulated" : "offline",
-        scenario,
-      });
-    };
-
-    const first = setTimeout(tick, 100);
-    const id = setInterval(tick, intervalMs);
     return () => {
-      clearTimeout(first);
-      clearInterval(id);
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
     };
-  }, [cfg, intervalMs, scenario]);
+  }, []);
 
-  const updateScenario = (s: SimulationScenario) => {
-    setScenario(s);
-    saveSavedScenario(s);
-  };
+  // 100% Real Firebase Realtime Database Hardware Listener
+  useEffect(() => {
+    if (typeof window === "undefined" || !database) {
+      return;
+    }
+
+    ensureAuth();
+
+    const telemetryRef = ref(database, `devices/${deviceId}/telemetry`);
+
+    const unsubscribe = onValue(
+      telemetryRef,
+      (snapshot: DataSnapshot) => {
+        if (!snapshot.exists()) {
+          // Hardware not yet connected or has not sent telemetry
+          setReading({
+            ts: Date.now() - 300000,
+            grossKg: null,
+            lpgKg: null,
+            percent: null,
+            gasRaw: null,
+            gasDo: null,
+            leakState: "SAFE",
+            batteryPct: 0,
+            rssi: 0,
+            source: "offline",
+            deviceOnline: false,
+            sensorFault: false,
+          });
+          return;
+        }
+
+        const val = snapshot.val();
+        if (!val || typeof val !== "object") return;
+
+        const ts = typeof val.timestamp === "number" ? val.timestamp : typeof val.ts === "number" ? val.ts : Date.now();
+        const deltaSec = Math.max(0, (Date.now() - ts) / 1000);
+
+        const isSensorFault = Boolean(val.sensorFault || val.leakState === "SENSOR_FAULT");
+        const isDeviceOnline = val.deviceOnline !== false;
+
+        let source: DataSource = "live";
+        if (isSensorFault) {
+          source = "fault";
+        } else if (!isDeviceOnline || deltaSec > 180) {
+          source = "offline";
+        } else if (deltaSec > 60) {
+          source = "stale";
+        }
+
+        const grossVal = typeof val.grossWeightKg === "number" ? val.grossWeightKg : typeof val.grossKg === "number" ? val.grossKg : null;
+        const lpgVal = typeof val.lpgRemainingKg === "number" ? val.lpgRemainingKg : typeof val.lpgKg === "number" ? val.lpgKg : null;
+        const percentVal = typeof val.gasPercentage === "number" ? val.gasPercentage : typeof val.percent === "number" ? val.percent : null;
+        const gasRawVal = typeof val.gasSensorRaw === "number" ? val.gasSensorRaw : typeof val.gasRaw === "number" ? val.gasRaw : null;
+        const gasDoVal = typeof val.gasDigitalState === "number" ? val.gasDigitalState : typeof val.gasDigitalState === "boolean" ? (val.gasDigitalState ? 1 : 0) : null;
+        const gasPpmVal = typeof val.gasPpm === "number" ? val.gasPpm : null;
+
+        const leakStateVal: LeakState =
+          val.leakState === "LEAK_ALARM" || val.leakState === "WARNING" || val.leakState === "SAFE" || val.leakState === "SENSOR_FAULT"
+            ? val.leakState
+            : val.gasStatus === "alarm"
+            ? "LEAK_ALARM"
+            : val.gasStatus === "warn"
+            ? "WARNING"
+            : "SAFE";
+
+        setReading({
+          ts,
+          grossKg: grossVal,
+          lpgKg: lpgVal,
+          percent: percentVal,
+          gasRaw: gasRawVal,
+          gasDo: gasDoVal,
+          gasPpm: gasPpmVal,
+          leakState: leakStateVal,
+          batteryPct: typeof val.batteryPct === "number" ? val.batteryPct : 100,
+          rssi: typeof val.rssi === "number" ? val.rssi : -60,
+          source,
+          deviceOnline: isDeviceOnline,
+          sensorFault: isSensorFault,
+        });
+      },
+      (error) => {
+        console.warn("Firebase telemetry listener error:", error);
+      }
+    );
+
+    return () => {
+      off(telemetryRef);
+    };
+  }, [deviceId]);
 
   const updateConfig = (newCfg: CylinderConfig) => {
     setCfg(newCfg);
     saveConfig(newCfg);
-    gross.current = newCfg.tareKg + newCfg.capacityKg * 0.62;
   };
 
-  return { reading, online, cfg, scenario, updateScenario, updateConfig };
+  const updateDeviceId = (newId: string) => {
+    setDeviceId(newId);
+    saveSavedDeviceId(newId);
+  };
+
+  return { reading, online, cfg, deviceId, updateConfig, updateDeviceId };
 }

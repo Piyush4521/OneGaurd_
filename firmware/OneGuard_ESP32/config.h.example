@@ -5,12 +5,37 @@
 #define WIFI_SSID "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
-// --- Firebase Configuration ---
-// Note: In production, use Firebase App Check or Firebase Auth token exchange.
-// Never expose privileged service account keys directly in firmware.
-#define FIREBASE_HOST "oneguard-lpg-default-rtdb.firebaseio.com"
-#define FIREBASE_AUTH "YOUR_FIREBASE_DATABASE_SECRET_OR_TOKEN"
+// --- Firebase ESP Client Configuration (Option 1: Native Auth) ---
+// Project Web API Key (Firebase Console -> Project Settings -> General -> Web API Key)
+#define FIREBASE_API_KEY "AIzaSyBxzgHRkj1lTxH0XuZQfR5qF-lC9mYHgzw"
+
+// Regional Realtime Database URL
+#define FIREBASE_DATABASE_URL "https://onegaurd-lpg-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+// Device Authentication Account (Create in Firebase Console -> Authentication -> Users)
+#define DEVICE_AUTH_EMAIL "oneguard_device_01@oneguard.internal"
+#define DEVICE_AUTH_PASSWORD "YOUR_SECURE_DEVICE_PASSWORD"
+
+// Device Identifier in Realtime Database
 #define DEVICE_ID "oneguard_kitchen_01"
+
+// --- Confirmed ESP32 Hardware GPIO Assignments ---
+#define HX711_DOUT_PIN 25
+#define HX711_SCK_PIN  26
+
+#define MQ6_AO_PIN     34
+#define MQ6_DO_PIN     27
+
+#define RTC_SDA_PIN    21
+#define RTC_SCL_PIN    22
+
+#define STATUS_LED_PIN 2
+// Note: Buzzer is NOT installed. Do not configure a buzzer GPIO. GPIO 27 is dedicated to MQ-6 DO.
+
+// --- MQ-6 Gas Sensor Digital Polarity ---
+// Standard LM393 comparator breakout modules pull DO LOW (0) when gas exceeds threshold.
+// Set to false only if your specific module has inverted active-HIGH output logic.
+#define MQ6_DO_ACTIVE_LOW true
 
 // --- Calibration & Hardware Parameters ---
 // Cylinder physical parameters (standard Indian 14.2kg domestic cylinder)
@@ -30,7 +55,7 @@
 // Using 10k and 10k (or 10k and 20k) divider. Factor = (R1 + R2) / R2
 #define MQ6_DIVIDER_RATIO 2.0f
 
-// Safety Alert Thresholds (in approximate ppm response)
+// Safety Alert Thresholds (in approximate sensor response indication)
 #define LEAK_WARN_PPM 1000
 #define LEAK_ALARM_PPM 2000
 #define LEAK_HYSTERESIS_PPM 150

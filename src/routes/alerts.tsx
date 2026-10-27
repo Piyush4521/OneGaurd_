@@ -99,7 +99,7 @@ function Alerts() {
       id: 3,
       kind: "Critical Leak",
       severity: "critical",
-      detail: "Test drill: >2000 ppm threshold detection and buzzer test.",
+      detail: "Safety drill: threshold detection and emergency notification dispatch.",
       time: "3 days ago",
       acked: true,
     },
